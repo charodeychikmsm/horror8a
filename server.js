@@ -13,38 +13,89 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-let players = {};
+let rooms = {}; // Хранилище лобби
 
 io.on('connection', (socket) => {
   console.log('Игрок подключился:', socket.id);
 
-  // Отправляем новому игроку список существующих
-  socket.emit('currentPlayers', players);
+  // Создание лобби
+  socket.on('createLobby', () => {
+    const code = Math.floor(1000 + Math.random() * 9000).toString(); // 4-значный код
+    rooms[code] = {
+      host: socket.id,
+      players: {},
+      difficulty: 'normal',
+      started: false
+    };
+    socket.join(code);
+    socket.roomCode = code;
+    socket.emit('lobbyCreated', code);
+  });
 
-  // Создаем нового игрока
-  players[socket.id] = {
-    x: 20, y: 18, angle: 0, pitch: 0, color: '#' + Math.floor(Math.random()*16777215).toString(16)
-  };
+  // Вход в лобби
+  socket.on('joinLobby', (code) => {
+    if(rooms[code] && !rooms[code].started) {
+      socket.join(code);
+      socket.roomCode = code;
+      socket.emit('lobbyJoined', code);
+      
+      // Отправляем хосту уведомление о новом игроке
+      io.to(rooms[code].host).emit('updatePlayers', Object.keys(rooms[code].players).length + 1);
+    } else {
+      socket.emit('lobbyError', 'Лобби не найдено или игра уже началась!');
+    }
+  });
 
-  // Сообщаем всем о новом игроке
-  socket.broadcast.emit('newPlayer', { id: socket.id, ...players[socket.id] });
+  // Смена сложности (только хост)
+  socket.on('changeDifficulty', (diff) => {
+    if(rooms[socket.roomCode]) {
+      rooms[socket.roomCode].difficulty = diff;
+      io.to(socket.roomCode).emit('difficultyChanged', diff);
+    }
+  });
+
+  // Начало игры
+  socket.on('startGame', () => {
+    if(rooms[socket.roomCode] && rooms[socket.roomCode].host === socket.id) {
+      rooms[socket.roomCode].started = true;
+      
+      let pColor = '#' + Math.floor(Math.random()*16777215).toString(16);
+      rooms[socket.roomCode].players[socket.id] = {
+        x: 20, y: 16, angle: 0, pitch: 0, color: pColor, isMoving: false
+      };
+      
+      io.to(socket.roomCode).emit('gameStarted', {
+        difficulty: rooms[socket.roomCode].difficulty,
+        players: rooms[socket.roomCode].players
+      });
+    }
+  });
 
   // Обновление позиции
   socket.on('playerMovement', (data) => {
-    if (players[socket.id]) {
-      players[socket.id].x = data.x;
-      players[socket.id].y = data.y;
-      players[socket.id].angle = data.angle;
-      players[socket.id].pitch = data.pitch;
-      socket.broadcast.emit('playerMoved', { id: socket.id, ...players[socket.id] });
+    const room = rooms[socket.roomCode];
+    if(room && room.players[socket.id]) {
+      room.players[socket.id].x = data.x;
+      room.players[socket.id].y = data.y;
+      room.players[socket.id].angle = data.angle;
+      room.players[socket.id].pitch = data.pitch;
+      room.players[socket.id].isMoving = data.isMoving;
+      
+      socket.to(socket.roomCode).emit('playerMoved', { id: socket.id, ...data });
     }
   });
 
   // Отключение
   socket.on('disconnect', () => {
-    console.log('Игрок отключился:', socket.id);
-    delete players[socket.id];
-    io.emit('playerDisconnected', socket.id);
+    if(socket.roomCode && rooms[socket.roomCode]) {
+      delete rooms[socket.roomCode].players[socket.id];
+      socket.to(socket.roomCode).emit('playerDisconnected', socket.id);
+      
+      if(rooms[socket.roomCode].host === socket.id) {
+        io.to(socket.roomCode).emit('hostDisconnected');
+        delete rooms[socket.roomCode];
+      }
+    }
   });
 });
 
