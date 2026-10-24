@@ -2,154 +2,226 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>8А</title>
-<!-- Подключаем Socket.io для мультиплеера -->
+<title>8А - Мультиплеер</title>
 <script src="/socket.io/socket.io.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;user-select:none}
 body{overflow:hidden;background:#000;color:#ccc;font-family:'Courier New',monospace}
 canvas{display:block}
 
-#menu{position:fixed;inset:0;background:#050000;display:flex;z-index:100;padding:40px;gap:30px}
-#menu-left{display:flex;flex-direction:column;gap:15px;width:250px}
-#menu h1{color:#a33;font-size:42px;text-shadow:0 0 20px #f00;margin-bottom:10px;letter-spacing:2px;text-align:center}
-.btn{background:#0a0000;color:#c44;border:2px solid #500;padding:12px 20px;font-size:16px;cursor:pointer;font-family:inherit;text-align:left;transition:0.2s}
-.btn:hover{background:#200;color:#f55;border-color:#a00;padding-left:30px}
-.btn-center{text-align:center;padding-left:12px}
-.btn-center:hover{padding-left:12px;background:#400}
+/* МЕНЮ И ЛОББИ */
+#ui-layer{position:fixed;inset:0;background:#050000;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100}
+.hidden{display:none !important}
+h1{color:#a33;font-size:48px;text-shadow:0 0 20px #f00;margin-bottom:30px;letter-spacing:5px}
+.btn{background:#0a0000;color:#c44;border:2px solid #500;padding:15px 30px;font-size:18px;cursor:pointer;font-family:inherit;margin:10px;transition:0.2s;min-width:250px;text-align:center}
+.btn:hover{background:#200;color:#f55;border-color:#a00;transform:scale(1.05)}
+input[type="text"]{background:#111;border:2px solid #500;color:#fa0;padding:15px;font-size:24px;font-family:inherit;text-align:center;letter-spacing:5px;margin-bottom:20px;width:250px;outline:none}
 
-#menu-center{flex:1;display:flex;flex-direction:column;max-width:600px;border:2px solid #333;background:#0a0505;padding:20px;overflow-y:auto}
-.tabs{display:flex;gap:10px;margin-bottom:20px;border-bottom:1px solid #500;padding-bottom:10px}
-.tab-btn{background:none;border:none;color:#888;font-family:inherit;font-size:16px;cursor:pointer;padding:5px 10px}
-.tab-btn.active{color:#f55;border-bottom:2px solid #f55}
-.tab-panel{display:none;flex-direction:column;gap:15px}
-.tab-panel.active{display:flex}
-.panel label{font-size:12px;color:#888;letter-spacing:1px;display:flex;justify-content:space-between}
-.panel input[type="range"]{width:100%;accent-color:#a00}
-.panel select{background:#000;color:#a33;border:1px solid #500;padding:5px;font-family:inherit;width:100%}
+/* ЛОББИ */
+#lobby-screen{text-align:center}
+#lobby-code{font-size:64px;color:#fa0;letter-spacing:10px;margin:20px 0;text-shadow:0 0 20px #a80}
+#player-count{font-size:20px;color:#888;margin-bottom:30px}
+.diff-btns{display:flex;gap:10px;margin-bottom:20px}
+.diff-btns .btn{min-width:100px;padding:10px}
+.diff-btns .btn.active{background:#400;color:#f55;border-color:#f00}
 
+/* HUD */
 #hud{position:fixed;inset:0;pointer-events:none;display:none;z-index:10}
-#noise-bar{position:absolute;left:20px;top:20px;width:200px;height:12px;background:#111;border:1px solid #333}
-#noise-fill{height:100%;width:0%;background:#fa0;transition:width 0.1s}
-#hp-text{position:absolute;left:20px;bottom:50px;color:#a33;font-size:14px}
-#hp-bar{position:absolute;left:20px;bottom:20px;width:200px;height:16px;background:#111;border:1px solid #500}
-#hp-fill{height:100%;width:100%;background:#c00}
-#hint{position:absolute;bottom:100px;left:50%;transform:translateX(-50%);color:#fa0;font-size:16px;background:rgba(0,0,0,0.8);padding:8px 16px;border:1px solid #a80;display:none}
 #crosshair{position:fixed;top:50%;left:50%;width:4px;height:4px;background:#fff;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:20;display:none}
 #minimap{position:absolute;top:20px;right:20px;width:150px;height:150px;border:2px solid #500;background:rgba(0,0,0,0.8)}
 </style>
 </head>
 <body>
 
-<div id="menu">
-  <div id="menu-left">
-    <h1>8А</h1>
-    <button class="btn btn-center" id="btn-play">Играть (Мультиплеер)</button>
-    <button class="btn btn-center" onclick="window.close()">Выход</button>
+<!-- ГЛАВНОЕ МЕНЮ -->
+<div id="ui-layer">
+  <h1>8А</h1>
+  
+  <div id="main-menu">
+    <button class="btn" id="btn-create">Создать лобби</button>
+    <button class="btn" id="btn-join-menu">Присоединиться по коду</button>
   </div>
-  <div id="menu-center">
-    <div class="tabs">
-      <button class="tab-btn active" onclick="showTab('tab-audio')">Звук</button>
-      <button class="tab-btn" onclick="showTab('tab-graphics')">Графика</button>
+
+  <div id="join-menu" class="hidden" style="text-align:center">
+    <input type="text" id="join-code" placeholder="КОД" maxlength="4">
+    <button class="btn" id="btn-join">Войти</button>
+    <button class="btn" onclick="showMainMenu()">Назад</button>
+  </div>
+
+  <div id="lobby-screen" class="hidden">
+    <h2>Лобби</h2>
+    <div id="lobby-code">0000</div>
+    <div id="player-count">Игроков: 1</div>
+    
+    <div class="diff-btns">
+      <button class="btn diff-btn active" data-diff="easy">Легко</button>
+      <button class="btn diff-btn" data-diff="normal">Нормально</button>
+      <button class="btn diff-btn" data-diff="hard">Сложно</button>
     </div>
-    <div id="tab-audio" class="tab-panel active panel">
-      <label>Общая громкость</label>
-      <input type="range" id="vol-slider" min="0" max="100" value="50">
-    </div>
-    <div id="tab-graphics" class="tab-panel panel">
-      <label>Угол обзора (FOV) <span id="fov-val">75</span></label>
-      <input type="range" id="fov-slider" min="40" max="110" value="75">
-    </div>
+
+    <button class="btn" id="btn-start" style="display:none">НАЧАТЬ ИГРУ</button>
+    <div id="wait-msg" style="color:#888;margin-top:10px">Ждем хоста...</div>
   </div>
 </div>
 
+<!-- ИГРА -->
 <canvas id="game"></canvas>
 <div id="hud">
-  <div id="noise-bar"><div id="noise-fill"></div></div>
-  <div id="hp-text">ЗДОРОВЬЕ: 150</div>
-  <div id="hp-bar"><div id="hp-fill"></div></div>
-  <div id="hint"></div>
   <canvas id="minimap" width="150" height="150"></canvas>
 </div>
 <div id="crosshair"></div>
 
 <script>
-// --- МУЛЬТИПЛЕЕР ---
+// --- СЕТЕВАЯ ЧАСТЬ ---
 let socket = io();
+let currentLobby = null;
+let isHost = false;
 let otherPlayers = {};
+let game = null;
+let difficulty = 'normal';
 
-socket.on('currentPlayers', (players) => {
-  Object.keys(players).forEach((id) => {
-    if (id !== socket.id) otherPlayers[id] = players[id];
+// UI элементы
+const ui = {
+  main: document.getElementById('main-menu'),
+  join: document.getElementById('join-menu'),
+  lobby: document.getElementById('lobby-screen'),
+  layer: document.getElementById('ui-layer'),
+  hud: document.getElementById('hud'),
+  crosshair: document.getElementById('crosshair'),
+  codeDisplay: document.getElementById('lobby-code'),
+  pCount: document.getElementById('player-count'),
+  btnStart: document.getElementById('btn-start'),
+  waitMsg: document.getElementById('wait-msg')
+};
+
+function showMainMenu() {
+  ui.main.classList.remove('hidden');
+  ui.join.classList.add('hidden');
+  ui.lobby.classList.add('hidden');
+}
+
+document.getElementById('btn-create').onclick = () => {
+  socket.emit('createLobby');
+};
+
+document.getElementById('btn-join-menu').onclick = () => {
+  ui.main.classList.add('hidden');
+  ui.join.classList.remove('hidden');
+};
+
+document.getElementById('btn-join').onclick = () => {
+  let code = document.getElementById('join-code').value;
+  if(code.length === 4) socket.emit('joinLobby', code);
+};
+
+// Обработка сокетов
+socket.on('lobbyCreated', (code) => {
+  currentLobby = code;
+  isHost = true;
+  ui.main.classList.add('hidden');
+  ui.lobby.classList.remove('hidden');
+  ui.codeDisplay.textContent = code;
+  ui.btnStart.style.display = 'inline-block';
+  ui.waitMsg.style.display = 'none';
+});
+
+socket.on('lobbyJoined', (code) => {
+  currentLobby = code;
+  isHost = false;
+  ui.join.classList.add('hidden');
+  ui.lobby.classList.remove('hidden');
+  ui.codeDisplay.textContent = code;
+  ui.btnStart.style.display = 'none';
+  ui.waitMsg.style.display = 'block';
+});
+
+socket.on('lobbyError', (msg) => alert(msg));
+
+socket.on('updatePlayers', (count) => {
+  ui.pCount.textContent = 'Игроков: ' + count;
+});
+
+// Сложность
+document.querySelectorAll('.diff-btn').forEach(btn => {
+  btn.onclick = () => {
+    if(!isHost) return;
+    document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    socket.emit('changeDifficulty', btn.dataset.diff);
+  };
+});
+
+socket.on('difficultyChanged', (diff) => {
+  document.querySelectorAll('.diff-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.diff === diff);
   });
 });
-socket.on('newPlayer', (player) => {
-  otherPlayers[player.id] = player;
+
+// Начало игры
+document.getElementById('btn-start').onclick = () => {
+  socket.emit('startGame');
+};
+
+socket.on('gameStarted', (data) => {
+  difficulty = data.difficulty;
+  ui.layer.classList.add('hidden');
+  ui.hud.style.display = 'block';
+  ui.crosshair.style.display = 'block';
+  
+  // Инициализация локального игрока
+  game = {
+    player: {x: 20, y: 16, angle: 0, pitch: 0, hp: 150},
+    lastStep: 0
+  };
+  
+  // Закидываем других игроков
+  otherPlayers = {};
+  for(let id in data.players) {
+    if(id !== socket.id) otherPlayers[id] = data.players[id];
+  }
+  
+  canvas.requestPointerLock();
+  lastTime = performance.now();
+  requestAnimationFrame(loop);
 });
-socket.on('playerMoved', (player) => {
-  if(otherPlayers[player.id]) {
-    otherPlayers[player.id].x = player.x;
-    otherPlayers[player.id].y = player.y;
-    otherPlayers[player.id].angle = player.angle;
-    otherPlayers[player.id].pitch = player.pitch;
+
+socket.on('playerMoved', (data) => {
+  if(otherPlayers[data.id]) {
+    otherPlayers[data.id].x = data.x;
+    otherPlayers[data.id].y = data.y;
+    otherPlayers[data.id].angle = data.angle;
+    otherPlayers[data.id].isMoving = data.isMoving;
   }
 });
+
 socket.on('playerDisconnected', (id) => {
   delete otherPlayers[id];
 });
 
-// --- НАСТРОЙКИ И КАРТА ---
-function showTab(id) {
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  event.target.classList.add('active');
-}
-let fov = 75, volMaster = 0.5;
-document.getElementById('vol-slider').addEventListener('input', e => volMaster = e.target.value / 100);
-document.getElementById('fov-slider').addEventListener('input', e => { fov = e.target.value; document.getElementById('fov-val').textContent = fov; });
-
-// Генератор карты (с окнами 'W' и дверями 'D')
-function buildMap() {
-  let g = Array.from({length: 30}, () => Array(40).fill('#'));
-  // Коридор
-  for(let x=2; x<38; x++) { g[15][x]='.'; g[18][x]='.'; }
-  for(let y=15; y<=18; y++) { g[y][13]='.'; g[y][26]='.'; }
-  
-  // Кабинеты сверху (с дверями и окнами)
-  for(let x=3; x<12; x++) { g[3][x]='W'; g[4][x]='.'; g[5][x]='.'; g[6][x]='W'; } // Окна
-  g[7][6] = 'D'; // Дверь
-  for(let x=6; x<9; x++) { g[4][x]='P'; g[5][x]='P'; } // Парты
-
-  // Кабинеты снизу
-  for(let x=3; x<12; x++) { g[25][x]='W'; g[24][x]='.'; g[23][x]='.'; g[22][x]='W'; }
-  g[21][6] = 'D';
-  
-  return g.map(row => row.join(''));
-}
-const MAP = buildMap();
-
-// --- КОД ИГРЫ ---
+// --- ЛОГИКА ИГРЫ ---
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 let W, H;
 function resize(){ W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
 window.addEventListener('resize', resize); resize();
 
-let game = null;
 let keys = {};
 let lastTime = 0;
-let audioCtx = null;
+let fov = 75;
 
-function initAudio() {
-  if(!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    let osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
-    osc.type = 'sawtooth'; osc.frequency.value = 40;
-    gain.gain.value = 0.02 * volMaster;
-    osc.connect(gain); gain.connect(audioCtx.destination); osc.start();
-  }
+// КАРТА (Без духов, просто стены и двери)
+function buildMap() {
+  let g = Array.from({length: 30}, () => Array(40).fill('#'));
+  for(let x=2; x<38; x++) { g[15][x]='.'; g[18][x]='.'; }
+  for(let y=15; y<=18; y++) { g[y][13]='.'; g[y][26]='.'; }
+  for(let x=3; x<12; x++) { g[3][x]='W'; g[4][x]='.'; g[5][x]='.'; g[6][x]='W'; }
+  g[7][6] = 'D';
+  for(let x=6; x<9; x++) { g[4][x]='P'; g[5][x]='P'; }
+  for(let x=3; x<12; x++) { g[25][x]='W'; g[24][x]='.'; g[23][x]='.'; g[22][x]='W'; }
+  g[21][6] = 'D';
+  return g.map(row => row.join(''));
 }
+const MAP = buildMap();
 
 function isWall(x, y) {
   let ix = Math.floor(x), iy = Math.floor(y);
@@ -157,58 +229,40 @@ function isWall(x, y) {
   return MAP[iy][ix] === '#' || MAP[iy][ix] === 'P';
 }
 
-function startGame() {
-  document.getElementById('menu').style.display = 'none';
-  document.getElementById('hud').style.display = 'block';
-  document.getElementById('crosshair').style.display = 'block';
-  initAudio();
-  
-  game = {
-    player: {x: 20, y: 16, angle: 0, pitch: 0, hp: 150},
-    lastStep: 0
-  };
-  
-  // Включаем захват мыши
-  canvas.requestPointerLock();
-  
-  lastTime = performance.now();
-  requestAnimationFrame(loop);
-}
-document.getElementById('btn-play').addEventListener('click', startGame);
-
 window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup', e => keys[e.code] = false);
 
+// ФИКС МЫШИ (Теперь не инвертировано)
 document.addEventListener('mousemove', e => {
   if(!game || document.pointerLockElement !== canvas) return;
   game.player.angle += e.movementX * 0.002;
-  // Камера вверх/вниз
-  game.player.pitch += e.movementY * 0.5;
+  game.player.pitch -= e.movementY * 1.5; // Минус исправляет инверсию
   if (game.player.pitch > 300) game.player.pitch = 300;
   if (game.player.pitch < -300) game.player.pitch = -300;
 });
 
 function update(dt) {
   let p = game.player;
-  let spd = (keys['ShiftLeft'] ? 4.0 : 2.0) * dt;
+  let spd = (keys['ShiftLeft'] ? 4.5 : 2.5) * dt;
   let dx = 0, dy = 0;
+  
   if(keys['KeyW']) { dx += Math.cos(p.angle); dy += Math.sin(p.angle); }
   if(keys['KeyS']) { dx -= Math.cos(p.angle); dy -= Math.sin(p.angle); }
   if(keys['KeyD']) { dx -= Math.sin(p.angle); dy += Math.cos(p.angle); }
   if(keys['KeyA']) { dx += Math.sin(p.angle); dy -= Math.cos(p.angle); }
   
+  let isMoving = false;
   let len = Math.hypot(dx, dy);
   if(len > 0) {
+    isMoving = true;
     let nx = p.x + (dx/len)*spd, ny = p.y + (dy/len)*spd;
     if(!isWall(nx-0.2, ny-0.2) && !isWall(nx+0.2, ny-0.2) && !isWall(nx-0.2, ny+0.2) && !isWall(nx+0.2, ny+0.2)) {
       p.x = nx; p.y = ny;
     }
   }
 
-  // Отправляем позицию на сервер (30 раз в секунду)
-  if(performance.now() % 33 < dt*1000) {
-    socket.emit('playerMovement', { x: p.x, y: p.y, angle: p.angle, pitch: p.pitch });
-  }
+  // Отправка координат
+  socket.emit('playerMovement', { x: p.x, y: p.y, angle: p.angle, pitch: p.pitch, isMoving });
 
   // Мини-карта
   let mm = document.getElementById('minimap').getContext('2d');
@@ -220,55 +274,61 @@ function update(dt) {
       if(MAP[y][x] === 'D') { mm.fillStyle = '#930'; mm.fillRect(x*3, y*3, 3, 3); }
     }
   }
-  // Другие игроки
   for(let id in otherPlayers) {
     let op = otherPlayers[id];
     mm.fillStyle = op.color || '#0f0';
     mm.beginPath(); mm.arc(op.x*3, op.y*3, 2.5, 0, Math.PI*2); mm.fill();
   }
-  // Я
   mm.fillStyle = '#fa0';
   mm.beginPath(); mm.arc(p.x*3, p.y*3, 3, 0, Math.PI*2); mm.fill();
 }
 
-// --- РЕНДЕР ---
-function drawGhostSprite(scrX, scrY, size) {
+// РИСОВАНИЕ 3D ИГРОКОВ
+function draw3DPlayer(scrX, scrY, size, color, isMoving, time) {
   ctx.save();
   ctx.translate(scrX, scrY);
-  let wobble = Math.sin(performance.now() * 0.008) * (size * 0.1);
   
-  // Голубое тело
-  ctx.fillStyle = '#6ed3df';
-  ctx.beginPath(); ctx.ellipse(0, 0, size*0.35, size*0.45, 0, 0, Math.PI*2); ctx.fill();
+  // Пропорции 3D-модели
+  let headR = size * 0.15;
+  let bodyW = size * 0.3;
+  let bodyH = size * 0.5;
   
-  // Левая рука
+  // Анимация ходьбы (машем руками и ногами)
+  let walkPhase = isMoving ? Math.sin(time * 0.015) * 0.5 : 0;
+  
+  // Ноги (рисуем сзади туловища)
+  ctx.fillStyle = '#222'; // Темные штаны
+  ctx.fillRect(-bodyW/2, size*0.3, bodyW*0.3, size*0.4 + walkPhase*size*0.2);
+  ctx.fillRect(bodyW/10, size*0.3, bodyW*0.3, size*0.4 - walkPhase*size*0.2);
+  
+  // Туловище (рубашка)
+  ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.moveTo(-size*0.2, 0);
-  ctx.quadraticCurveTo(-size*0.7, -size*0.2 + wobble, -size*1.0, size*0.1);
-  ctx.quadraticCurveTo(-size*0.5, size*0.1, -size*0.2, size*0.2);
+  ctx.roundRect(-bodyW/2, -bodyH/2, bodyW, bodyH, size*0.05);
   ctx.fill();
   
-  // Правая рука
+  // Руки
+  ctx.fillStyle = color;
+  ctx.fillRect(-bodyW/2 - size*0.08, -bodyH/2, size*0.08, bodyH*0.8 + walkPhase*size*0.2);
+  ctx.fillRect(bodyW/2, -bodyH/2, size*0.08, bodyH*0.8 - walkPhase*size*0.2);
+
+  // Голова
+  ctx.fillStyle = '#fcd0ba';
   ctx.beginPath();
-  ctx.moveTo(size*0.2, 0);
-  ctx.quadraticCurveTo(size*0.7, -size*0.2 - wobble, size*1.0, size*0.1);
-  ctx.quadraticCurveTo(size*0.5, size*0.1, size*0.2, size*0.2);
+  ctx.arc(0, -bodyH/2 - headR, headR, 0, Math.PI*2);
   ctx.fill();
 
-  // Черные глаза
+  // Глаза
   ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.arc(-size*0.12, -size*0.1, size*0.1, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(size*0.12, -size*0.1, size*0.1, 0, Math.PI*2); ctx.fill();
-  
-  // Рот
-  ctx.beginPath(); ctx.ellipse(0, size*0.05, size*0.08, size*0.04, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillRect(-headR*0.4, -bodyH/2 - headR*1.2, headR*0.2, headR*0.2);
+  ctx.fillRect(headR*0.2, -bodyH/2 - headR*1.2, headR*0.2, headR*0.2);
   
   ctx.restore();
 }
 
 function render() {
   let p = game.player;
-  let horizon = H/2 + p.pitch; // Сдвиг горизонта (камера вверх/вниз)
+  let horizon = H/2 + p.pitch; // Поднимаем/опускаем горизонт
   
   ctx.fillStyle = '#050000'; ctx.fillRect(0, 0, W, H);
   
@@ -300,33 +360,25 @@ function render() {
     let wallH = (H * 1.2) / dist;
     let yTop = horizon - wallH/2;
     
-    if(hit === '#') { // Обычная стена
+    if(hit === '#') { 
       ctx.fillStyle = side === 1 ? `rgb(${60*bright},${50*bright},${50*bright})` : `rgb(${80*bright},${70*bright},${70*bright})`;
       ctx.fillRect(i, yTop, 2, wallH);
     } else if(hit === 'W') { // Окна
       ctx.fillStyle = `rgba(100, 200, 255, ${bright})`;
       ctx.fillRect(i, yTop, 2, wallH);
-      // Рамы
       ctx.fillStyle = '#000';
-      ctx.fillRect(i, yTop + wallH/3, 2, 2); ctx.fillRect(i, yTop + wallH*2/3, 2, 2);
-      ctx.fillRect(i, yTop + wallH/2, 2, 2);
+      ctx.fillRect(i, yTop + wallH/3, 2, 2); ctx.fillRect(i, yTop + wallH*2/3, 2, 2); ctx.fillRect(i, yTop + wallH/2, 2, 2);
     } else if(hit === 'D') { // Двери
       ctx.fillStyle = side === 1 ? `rgb(${100*bright},${50*bright},${20*bright})` : `rgb(${139*bright},${69*bright},${19*bright})`;
       ctx.fillRect(i, yTop, 2, wallH);
-      // Номер на двери
-      if(dist < 5 && Math.abs(camX) < 0.15) {
-        ctx.fillStyle = '#fa0';
-        ctx.font = `${Math.floor(wallH*0.3)}px monospace`;
-        ctx.textAlign = 'center';
-        ctx.fillText('33', i, horizon);
-      }
     } else if(hit === 'P') { // Парты
       ctx.fillStyle = `rgb(${80*bright},${60*bright},${30*bright})`;
       ctx.fillRect(i, yTop, 2, wallH);
     }
   }
   
-  // Рендер других игроков (друзей)
+  // Рендер других игроков
+  let time = performance.now();
   for(let id in otherPlayers) {
     let op = otherPlayers[id];
     let adx = op.x - p.x, ady = op.y - p.y, dist = Math.hypot(adx, ady);
@@ -336,25 +388,13 @@ function render() {
     if(Math.abs(ang) > (fovRad/2 + 0.1)) continue;
     
     let scrX = W/2 + Math.tan(ang) * (W/2) / Math.tan(fovRad/2);
-    let size = (H * 1.0) / dist;
+    let size = (H * 1.2) / dist;
     let cx = Math.floor(scrX);
     if(cx >= 0 && cx < W && zBuffer[cx] < dist) continue;
     
-    // Рисуем друга как капсулу с его цветом
-    ctx.fillStyle = op.color || '#0f0';
-    ctx.fillRect(scrX - size*0.2, horizon - size*0.5, size*0.4, size*1.0);
-    ctx.beginPath(); ctx.arc(scrX, horizon - size*0.5, size*0.2, 0, Math.PI*2); ctx.fill();
+    // Рисуем 3D модель
+    draw3DPlayer(scrX, horizon + size*0.1, size, op.color || '#0f0', op.isMoving, time);
   }
-
-  // Рисуем духа (тестовый, просто чтобы ты увидела)
-  if (zBuffer[Math.floor(W/2)] > 3) {
-    drawGhostSprite(W/2 + Math.sin(performance.now()*0.001)*100, horizon, 200);
-  }
-
-  // Виньетка
-  let vg = ctx.createRadialGradient(W/2, H/2, H*0.1, W/2, H/2, H*0.8);
-  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(0.5, 'rgba(0,0,0,0.6)'); vg.addColorStop(1, 'rgba(0,0,0,0.95)');
-  ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
 }
 
 function loop(t) {
