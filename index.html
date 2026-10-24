@@ -21,14 +21,15 @@ input[type="text"]{background:#111;border:2px solid #500;color:#fa0;padding:15px
 #lobby-screen{text-align:center}
 #lobby-code{font-size:64px;color:#fa0;letter-spacing:10px;margin:20px 0;text-shadow:0 0 20px #a80}
 #player-count{font-size:20px;color:#888;margin-bottom:30px}
-.diff-btns{display:flex;gap:10px;margin-bottom:20px}
+.diff-btns{display:flex;gap:10px;margin-bottom:20px;justify-content:center}
 .diff-btns .btn{min-width:100px;padding:10px}
 .diff-btns .btn.active{background:#400;color:#f55;border-color:#f00}
 
 /* HUD */
 #hud{position:fixed;inset:0;pointer-events:none;display:none;z-index:10}
-#crosshair{position:fixed;top:50%;left:50%;width:4px;height:4px;background:#fff;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:20;display:none}
+#crosshair{position:fixed;top:50%;left:50%;width:4px;height:4px;background:rgba(255,255,255,0.7);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:20;display:none}
 #minimap{position:absolute;top:20px;right:20px;width:150px;height:150px;border:2px solid #500;background:rgba(0,0,0,0.8)}
+#vignette{position:absolute;inset:0;background:radial-gradient(circle, transparent 40%, rgba(0,0,0,0.9) 100%);pointer-events:none}
 </style>
 </head>
 <body>
@@ -67,6 +68,7 @@ input[type="text"]{background:#111;border:2px solid #500;color:#fa0;padding:15px
 <!-- ИГРА -->
 <canvas id="game"></canvas>
 <div id="hud">
+  <div id="vignette"></div>
   <canvas id="minimap" width="150" height="150"></canvas>
 </div>
 <div id="crosshair"></div>
@@ -80,7 +82,6 @@ let otherPlayers = {};
 let game = null;
 let difficulty = 'normal';
 
-// UI элементы
 const ui = {
   main: document.getElementById('main-menu'),
   join: document.getElementById('join-menu'),
@@ -100,48 +101,30 @@ function showMainMenu() {
   ui.lobby.classList.add('hidden');
 }
 
-document.getElementById('btn-create').onclick = () => {
-  socket.emit('createLobby');
-};
-
-document.getElementById('btn-join-menu').onclick = () => {
-  ui.main.classList.add('hidden');
-  ui.join.classList.remove('hidden');
-};
-
+document.getElementById('btn-create').onclick = () => socket.emit('createLobby');
+document.getElementById('btn-join-menu').onclick = () => { ui.main.classList.add('hidden'); ui.join.classList.remove('hidden'); };
 document.getElementById('btn-join').onclick = () => {
   let code = document.getElementById('join-code').value;
   if(code.length === 4) socket.emit('joinLobby', code);
 };
 
-// Обработка сокетов
 socket.on('lobbyCreated', (code) => {
-  currentLobby = code;
-  isHost = true;
-  ui.main.classList.add('hidden');
-  ui.lobby.classList.remove('hidden');
+  currentLobby = code; isHost = true;
+  ui.main.classList.add('hidden'); ui.lobby.classList.remove('hidden');
   ui.codeDisplay.textContent = code;
-  ui.btnStart.style.display = 'inline-block';
-  ui.waitMsg.style.display = 'none';
+  ui.btnStart.style.display = 'inline-block'; ui.waitMsg.style.display = 'none';
 });
 
 socket.on('lobbyJoined', (code) => {
-  currentLobby = code;
-  isHost = false;
-  ui.join.classList.add('hidden');
-  ui.lobby.classList.remove('hidden');
+  currentLobby = code; isHost = false;
+  ui.join.classList.add('hidden'); ui.lobby.classList.remove('hidden');
   ui.codeDisplay.textContent = code;
-  ui.btnStart.style.display = 'none';
-  ui.waitMsg.style.display = 'block';
+  ui.btnStart.style.display = 'none'; ui.waitMsg.style.display = 'block';
 });
 
 socket.on('lobbyError', (msg) => alert(msg));
+socket.on('updatePlayers', (count) => ui.pCount.textContent = 'Игроков: ' + count);
 
-socket.on('updatePlayers', (count) => {
-  ui.pCount.textContent = 'Игроков: ' + count;
-});
-
-// Сложность
 document.querySelectorAll('.diff-btn').forEach(btn => {
   btn.onclick = () => {
     if(!isHost) return;
@@ -150,17 +133,11 @@ document.querySelectorAll('.diff-btn').forEach(btn => {
     socket.emit('changeDifficulty', btn.dataset.diff);
   };
 });
-
 socket.on('difficultyChanged', (diff) => {
-  document.querySelectorAll('.diff-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.diff === diff);
-  });
+  document.querySelectorAll('.diff-btn').forEach(b => b.classList.toggle('active', b.dataset.diff === diff));
 });
 
-// Начало игры
-document.getElementById('btn-start').onclick = () => {
-  socket.emit('startGame');
-};
+document.getElementById('btn-start').onclick = () => socket.emit('startGame');
 
 socket.on('gameStarted', (data) => {
   difficulty = data.difficulty;
@@ -168,13 +145,12 @@ socket.on('gameStarted', (data) => {
   ui.hud.style.display = 'block';
   ui.crosshair.style.display = 'block';
   
-  // Инициализация локального игрока
+  // Спавн ровно в центре перекрестка (x: 10.5, y: 10.5)
   game = {
-    player: {x: 20, y: 16, angle: 0, pitch: 0, hp: 150},
+    player: {x: 10.5, y: 10.5, angle: 0, pitch: 0},
     lastStep: 0
   };
   
-  // Закидываем других игроков
   otherPlayers = {};
   for(let id in data.players) {
     if(id !== socket.id) otherPlayers[id] = data.players[id];
@@ -193,10 +169,7 @@ socket.on('playerMoved', (data) => {
     otherPlayers[data.id].isMoving = data.isMoving;
   }
 });
-
-socket.on('playerDisconnected', (id) => {
-  delete otherPlayers[id];
-});
+socket.on('playerDisconnected', (id) => delete otherPlayers[id]);
 
 // --- ЛОГИКА ИГРЫ ---
 const canvas = document.getElementById('game');
@@ -209,16 +182,20 @@ let keys = {};
 let lastTime = 0;
 let fov = 75;
 
-// КАРТА (Без духов, просто стены и двери)
+// ПРОСТАЯ КАРТА (Крест), чтобы точно не застрять
 function buildMap() {
-  let g = Array.from({length: 30}, () => Array(40).fill('#'));
-  for(let x=2; x<38; x++) { g[15][x]='.'; g[18][x]='.'; }
-  for(let y=15; y<=18; y++) { g[y][13]='.'; g[y][26]='.'; }
-  for(let x=3; x<12; x++) { g[3][x]='W'; g[4][x]='.'; g[5][x]='.'; g[6][x]='W'; }
-  g[7][6] = 'D';
-  for(let x=6; x<9; x++) { g[4][x]='P'; g[5][x]='P'; }
-  for(let x=3; x<12; x++) { g[25][x]='W'; g[24][x]='.'; g[23][x]='.'; g[22][x]='W'; }
-  g[21][6] = 'D';
+  let g = Array.from({length: 20}, () => Array(20).fill('#'));
+  // Горизонтальный коридор
+  for(let i=1; i<19; i++) g[10][i] = '.';
+  // Вертикальный коридор
+  for(let i=1; i<19; i++) g[i][10] = '.';
+  
+  // Пара дверей (D) и окон (W)
+  g[10][2] = 'D'; // Дверь слева
+  g[10][17] = 'W'; // Окно справа
+  g[2][10] = 'W'; // Окно сверху
+  g[17][10] = 'D'; // Дверь снизу
+  
   return g.map(row => row.join(''));
 }
 const MAP = buildMap();
@@ -226,19 +203,23 @@ const MAP = buildMap();
 function isWall(x, y) {
   let ix = Math.floor(x), iy = Math.floor(y);
   if(ix < 0 || iy < 0 || iy >= MAP.length || ix >= MAP[0].length) return true;
-  return MAP[iy][ix] === '#' || MAP[iy][ix] === 'P';
+  return MAP[iy][ix] === '#';
 }
 
 window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup', e => keys[e.code] = false);
 
-// ФИКС МЫШИ (Теперь не инвертировано)
+// ФИКС КАМЕРЫ
 document.addEventListener('mousemove', e => {
   if(!game || document.pointerLockElement !== canvas) return;
   game.player.angle += e.movementX * 0.002;
-  game.player.pitch -= e.movementY * 1.5; // Минус исправляет инверсию
-  if (game.player.pitch > 300) game.player.pitch = 300;
-  if (game.player.pitch < -300) game.player.pitch = -300;
+  
+  // Инверсия убрана, чувствительность понижена
+  game.player.pitch -= e.movementY * 0.8; 
+  
+  // Ограничение взгляда вверх/вниз
+  if (game.player.pitch > 200) game.player.pitch = 200;
+  if (game.player.pitch < -200) game.player.pitch = -200;
 });
 
 function update(dt) {
@@ -246,91 +227,90 @@ function update(dt) {
   let spd = (keys['ShiftLeft'] ? 4.5 : 2.5) * dt;
   let dx = 0, dy = 0;
   
-  if(keys['KeyW']) { dx += Math.cos(p.angle); dy += Math.sin(p.angle); }
-  if(keys['KeyS']) { dx -= Math.cos(p.angle); dy -= Math.sin(p.angle); }
-  if(keys['KeyD']) { dx -= Math.sin(p.angle); dy += Math.cos(p.angle); }
-  if(keys['KeyA']) { dx += Math.sin(p.angle); dy -= Math.cos(p.angle); }
+  if(keys['KeyW'] || keys['ArrowUp']) { dx += Math.cos(p.angle); dy += Math.sin(p.angle); }
+  if(keys['KeyS'] || keys['ArrowDown']) { dx -= Math.cos(p.angle); dy -= Math.sin(p.angle); }
+  if(keys['KeyD'] || keys['ArrowRight']) { dx -= Math.sin(p.angle); dy += Math.cos(p.angle); }
+  if(keys['KeyA'] || keys['ArrowLeft']) { dx += Math.sin(p.angle); dy -= Math.cos(p.angle); }
   
   let isMoving = false;
   let len = Math.hypot(dx, dy);
   if(len > 0) {
     isMoving = true;
+    // Радиус коллизии уменьшен для плавности
     let nx = p.x + (dx/len)*spd, ny = p.y + (dy/len)*spd;
-    if(!isWall(nx-0.2, ny-0.2) && !isWall(nx+0.2, ny-0.2) && !isWall(nx-0.2, ny+0.2) && !isWall(nx+0.2, ny+0.2)) {
+    if(!isWall(nx-0.15, ny-0.15) && !isWall(nx+0.15, ny-0.15) && !isWall(nx-0.15, ny+0.15) && !isWall(nx+0.15, ny+0.15)) {
       p.x = nx; p.y = ny;
     }
   }
 
-  // Отправка координат
   socket.emit('playerMovement', { x: p.x, y: p.y, angle: p.angle, pitch: p.pitch, isMoving });
 
   // Мини-карта
   let mm = document.getElementById('minimap').getContext('2d');
   mm.clearRect(0,0,150,150);
-  mm.fillStyle = '#111'; mm.fillRect(0,0,150,150);
-  for(let y=0; y<MAP.length; y++) {
-    for(let x=0; x<MAP[0].length; x++) {
-      if(MAP[y][x] === '#') { mm.fillStyle = '#333'; mm.fillRect(x*3, y*3, 3, 3); }
-      if(MAP[y][x] === 'D') { mm.fillStyle = '#930'; mm.fillRect(x*3, y*3, 3, 3); }
+  mm.fillStyle = 'rgba(0,0,0,0.8)'; mm.fillRect(0,0,150,150);
+  let cellSize = 150 / 20;
+  for(let y=0; y<20; y++) {
+    for(let x=0; x<20; x++) {
+      if(MAP[y][x] === '#') { mm.fillStyle = '#333'; mm.fillRect(x*cellSize, y*cellSize, cellSize, cellSize); }
+      if(MAP[y][x] === 'D') { mm.fillStyle = '#930'; mm.fillRect(x*cellSize, y*cellSize, cellSize, cellSize); }
+      if(MAP[y][x] === 'W') { mm.fillStyle = '#39f'; mm.fillRect(x*cellSize, y*cellSize, cellSize, cellSize); }
     }
   }
   for(let id in otherPlayers) {
     let op = otherPlayers[id];
     mm.fillStyle = op.color || '#0f0';
-    mm.beginPath(); mm.arc(op.x*3, op.y*3, 2.5, 0, Math.PI*2); mm.fill();
+    mm.beginPath(); mm.arc(op.x*cellSize, op.y*cellSize, 3, 0, Math.PI*2); mm.fill();
   }
   mm.fillStyle = '#fa0';
-  mm.beginPath(); mm.arc(p.x*3, p.y*3, 3, 0, Math.PI*2); mm.fill();
+  mm.beginPath(); mm.arc(p.x*cellSize, p.y*cellSize, 3, 0, Math.PI*2); mm.fill();
 }
 
-// РИСОВАНИЕ 3D ИГРОКОВ
+// 3D МОДЕЛЬ ИГРОКА
 function draw3DPlayer(scrX, scrY, size, color, isMoving, time) {
   ctx.save();
   ctx.translate(scrX, scrY);
   
-  // Пропорции 3D-модели
-  let headR = size * 0.15;
-  let bodyW = size * 0.3;
-  let bodyH = size * 0.5;
-  
-  // Анимация ходьбы (машем руками и ногами)
   let walkPhase = isMoving ? Math.sin(time * 0.015) * 0.5 : 0;
   
-  // Ноги (рисуем сзади туловища)
-  ctx.fillStyle = '#222'; // Темные штаны
-  ctx.fillRect(-bodyW/2, size*0.3, bodyW*0.3, size*0.4 + walkPhase*size*0.2);
-  ctx.fillRect(bodyW/10, size*0.3, bodyW*0.3, size*0.4 - walkPhase*size*0.2);
+  // Тень
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.beginPath(); ctx.ellipse(0, size*0.4, size*0.15, size*0.05, 0, 0, Math.PI*2); ctx.fill();
+
+  // Ноги
+  ctx.fillStyle = '#111'; 
+  ctx.fillRect(-size*0.08, size*0.1, size*0.06, size*0.3 + walkPhase*size*0.1);
+  ctx.fillRect(size*0.02, size*0.1, size*0.06, size*0.3 - walkPhase*size*0.1);
   
-  // Туловище (рубашка)
+  // Тело (куртка/рубашка)
   ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.roundRect(-bodyW/2, -bodyH/2, bodyW, bodyH, size*0.05);
-  ctx.fill();
+  ctx.beginPath(); ctx.roundRect(-size*0.15, -size*0.15, size*0.3, size*0.3, size*0.05); ctx.fill();
   
   // Руки
-  ctx.fillStyle = color;
-  ctx.fillRect(-bodyW/2 - size*0.08, -bodyH/2, size*0.08, bodyH*0.8 + walkPhase*size*0.2);
-  ctx.fillRect(bodyW/2, -bodyH/2, size*0.08, bodyH*0.8 - walkPhase*size*0.2);
+  ctx.fillRect(-size*0.22, -size*0.1, size*0.05, size*0.25 + walkPhase*size*0.1);
+  ctx.fillRect(size*0.17, -size*0.1, size*0.05, size*0.25 - walkPhase*size*0.1);
 
   // Голова
   ctx.fillStyle = '#fcd0ba';
-  ctx.beginPath();
-  ctx.arc(0, -bodyH/2 - headR, headR, 0, Math.PI*2);
-  ctx.fill();
-
-  // Глаза
+  ctx.beginPath(); ctx.arc(0, -size*0.3, size*0.1, 0, Math.PI*2); ctx.fill();
+  
+  // Глаза (смотрят вправо)
   ctx.fillStyle = '#000';
-  ctx.fillRect(-headR*0.4, -bodyH/2 - headR*1.2, headR*0.2, headR*0.2);
-  ctx.fillRect(headR*0.2, -bodyH/2 - headR*1.2, headR*0.2, headR*0.2);
+  ctx.fillRect(-size*0.04, -size*0.32, size*0.02, size*0.02);
+  ctx.fillRect(size*0.02, -size*0.32, size*0.02, size*0.02);
   
   ctx.restore();
 }
 
 function render() {
   let p = game.player;
-  let horizon = H/2 + p.pitch; // Поднимаем/опускаем горизонт
+  let horizon = H/2 + p.pitch; // Сдвиг горизонта
   
-  ctx.fillStyle = '#050000'; ctx.fillRect(0, 0, W, H);
+  // Небо и пол (двигаются при взгляде вверх/вниз)
+  ctx.fillStyle = '#080808'; // Темный потолок
+  ctx.fillRect(0, 0, W, Math.max(0, horizon));
+  ctx.fillStyle = '#151515'; // Темный пол
+  ctx.fillRect(0, Math.max(0, horizon), W, H);
   
   let zBuffer = new Float32Array(W);
   let fovRad = fov * Math.PI / 180;
@@ -346,7 +326,7 @@ function render() {
     if(dy < 0) { stepY = -1; sideDistY = (p.y - mapY) * ddy; } else { stepY = 1; sideDistY = (mapY + 1 - p.y) * ddy; }
     
     let side = 0, perp = 0, hit = '#';
-    for(let k=0; k<30; k++) {
+    for(let k=0; k<25; k++) {
       if(sideDistX < sideDistY) { perp = sideDistX; sideDistX += ddx; mapX += stepX; side = 0; }
       else { perp = sideDistY; sideDistY += ddy; mapY += stepY; side = 1; }
       if(mapY < 0 || mapX < 0 || mapY >= MAP.length || mapX >= MAP[0].length) { hit = '#'; break; }
@@ -360,20 +340,31 @@ function render() {
     let wallH = (H * 1.2) / dist;
     let yTop = horizon - wallH/2;
     
-    if(hit === '#') { 
-      ctx.fillStyle = side === 1 ? `rgb(${60*bright},${50*bright},${50*bright})` : `rgb(${80*bright},${70*bright},${70*bright})`;
+    if(hit === '#') {
+      // Текстура стены (кирпичи)
+      let wallX = side === 0 ? p.y + dist * dy : p.x + dist * dx;
+      let brick = Math.floor(wallX * 4) % 2 === 0;
+      let base = side === 1 ? 50 : 70;
+      if(brick) base -= 15;
+      
+      ctx.fillStyle = `rgb(${base*bright},${base*0.8*bright},${base*0.8*bright})`;
       ctx.fillRect(i, yTop, 2, wallH);
-    } else if(hit === 'W') { // Окна
-      ctx.fillStyle = `rgba(100, 200, 255, ${bright})`;
+    } else if(hit === 'D') { // Дверь
+      ctx.fillStyle = `rgb(${120*bright},${60*bright},${20*bright})`;
       ctx.fillRect(i, yTop, 2, wallH);
+      // Ручка двери
+      if(dist < 5 && Math.abs(camX) < 0.1) {
+        ctx.fillStyle = `rgb(${200*bright},${180*bright},${0})`;
+        ctx.fillRect(i, yTop + wallH/2, 2, wallH*0.05);
+      }
+    } else if(hit === 'W') { // Окно
+      ctx.fillStyle = `rgba(80, 150, 255, ${bright})`;
+      ctx.fillRect(i, yTop, 2, wallH);
+      // Рамы
       ctx.fillStyle = '#000';
-      ctx.fillRect(i, yTop + wallH/3, 2, 2); ctx.fillRect(i, yTop + wallH*2/3, 2, 2); ctx.fillRect(i, yTop + wallH/2, 2, 2);
-    } else if(hit === 'D') { // Двери
-      ctx.fillStyle = side === 1 ? `rgb(${100*bright},${50*bright},${20*bright})` : `rgb(${139*bright},${69*bright},${19*bright})`;
-      ctx.fillRect(i, yTop, 2, wallH);
-    } else if(hit === 'P') { // Парты
-      ctx.fillStyle = `rgb(${80*bright},${60*bright},${30*bright})`;
-      ctx.fillRect(i, yTop, 2, wallH);
+      ctx.fillRect(i, yTop + wallH/2, 2, wallH*0.05);
+      ctx.fillRect(i, yTop, 2, wallH*0.05);
+      ctx.fillRect(i, yTop + wallH - wallH*0.05, 2, wallH*0.05);
     }
   }
   
@@ -382,7 +373,7 @@ function render() {
   for(let id in otherPlayers) {
     let op = otherPlayers[id];
     let adx = op.x - p.x, ady = op.y - p.y, dist = Math.hypot(adx, ady);
-    if(dist < 0.5) continue;
+    if(dist < 0.3) continue;
     let ang = Math.atan2(ady, adx) - p.angle;
     while(ang > Math.PI) ang -= Math.PI*2; while(ang < -Math.PI) ang += Math.PI*2;
     if(Math.abs(ang) > (fovRad/2 + 0.1)) continue;
@@ -392,7 +383,6 @@ function render() {
     let cx = Math.floor(scrX);
     if(cx >= 0 && cx < W && zBuffer[cx] < dist) continue;
     
-    // Рисуем 3D модель
     draw3DPlayer(scrX, horizon + size*0.1, size, op.color || '#0f0', op.isMoving, time);
   }
 }
